@@ -10,8 +10,8 @@
 
 extern const uint8_t _binary_harzbios_bin_start[];
 extern const uint8_t _binary_harzbios_bin_end[];
-extern const uint8_t _binary_hartplay_bin_start[];
-extern const uint8_t _binary_hartplay_bin_end[];
+extern const uint8_t _binary_harzplay_bin_start[];
+extern const uint8_t _binary_harzplay_bin_end[];
 
 
 // 参考：普通のやつらの下を行け: objcopy で実行ファイルにデータを埋め込

@@ -280,8 +280,8 @@ static void uploadHarzBios(CHarz80Ctrl &harz)
 static void uploadPlayer(CHarz80Ctrl &harz)
 {
 	const uint32_t topAddr = ADDR_PLAYER;
-	const uint8_t *pStart = _binary_hartplay_bin_start;
-	const uint8_t *pEnd = _binary_hartplay_bin_end;
+	const uint8_t *pStart = _binary_harzplay_bin_start;
+	const uint8_t *pEnd = _binary_harzplay_bin_end;
 	const int SZ = (int)pEnd - (int)pStart;
 
 #ifdef FOR_DEBUG

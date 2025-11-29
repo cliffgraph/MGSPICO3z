@@ -10,10 +10,10 @@ add_custom_command(
 	COMMAND ${Z80Asm} -i harzbios.z80 -o ${CMAKE_CURRENT_BINARY_DIR}/harzbios.bin -lst ${CMAKE_CURRENT_BINARY_DIR}/harzbios.lst ${Z80AsmOpt}
 )
 add_custom_command(
-	OUTPUT hartplay.bin
-	DEPENDS hartplay.z80
+	OUTPUT harzplay.bin
+	DEPENDS harzplay.z80
 	COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR}
-	COMMAND ${Z80Asm} -i hartplay.z80 -o ${CMAKE_CURRENT_BINARY_DIR}/hartplay.bin -lst ${CMAKE_CURRENT_BINARY_DIR}/hartplay.lst ${Z80AsmOpt}
+	COMMAND ${Z80Asm} -i harzplay.z80 -o ${CMAKE_CURRENT_BINARY_DIR}/harzplay.bin -lst ${CMAKE_CURRENT_BINARY_DIR}/harzplay.lst ${Z80AsmOpt}
 )
 
 set(ObjCpy arm-none-eabi-objcopy.exe)
@@ -25,9 +25,9 @@ add_custom_command(
 	COMMAND ${ObjCpy} ${ObjCpyOpt} harzbios.bin ${CMAKE_CURRENT_BINARY_DIR}/harzbios.o
 )
 add_custom_command(
-	OUTPUT hartplay.o
-	DEPENDS hartplay.bin
-	COMMAND ${ObjCpy} ${ObjCpyOpt} hartplay.bin ${CMAKE_CURRENT_BINARY_DIR}/hartplay.o
+	OUTPUT harzplay.o
+	DEPENDS harzplay.bin
+	COMMAND ${ObjCpy} ${ObjCpyOpt} harzplay.bin ${CMAKE_CURRENT_BINARY_DIR}/harzplay.o
 )
 
 add_library(
@@ -35,7 +35,7 @@ add_library(
 	STATIC
 	harzlib.cpp
 	harzbios.o
-	hartplay.o
+	harzplay.o
 )
 
 target_include_directories(
