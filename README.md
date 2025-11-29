@@ -1,5 +1,5 @@
 # MGSPICO3z 
-2025/09/03 harumakkin
+2025/11/29 harumakkin
 
 ![mgspico3-01](docs/pics/mgspico3.png)</br>**fig.1 MGSPICO3z**
 
@@ -99,12 +99,13 @@ MGSPICO3zではTangNano9K内に、Z80 CPU(TV80)を実装しMGSDRVとKINROU5に�
 ## 各MGSPICOでサポートしている楽曲データ形式
 |Model|MGS|MuSICA|NDP|VGM|TGF|
 |:--|:-:|:-:|:-:|:-:|:-:|
-|MGSPICO|✓|✓|✓|✓|✓|
-|MGSPICO 2|✓|✓|✓|✓|✓|
-|MGSPICO 3|✓|✓|✓|✓|✓|
-|MGSPICO 3z|✓|✓|✓|✓※|✓※|
+|MGSPICO|✓|✓|✓※1|✓|✓|
+|MGSPICO 2|✓|✓|✓※1|✓|✓|
+|MGSPICO 3|✓|✓|✓※1|✓|✓|
+|MGSPICO 3z|✓|✓|✓|✓※2|✓※2|
 
-※MGSPICO 3z のVGM/TGFの再生では、SCC+の再生には対応していません。
+※1.NDPv1.04の16KBを超える曲データ再生には対応していません。
+※2.MGSPICO 3z のVGM/TGFの再生では、SCC+の再生には対応していません。
 
 ## 余禄
 ##### VGM対応
