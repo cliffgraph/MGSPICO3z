@@ -10,7 +10,6 @@ add_executable(
 	timerobj.cpp
 	harz80/CHarz80Ctrl.cpp
 	mgs/mgs_tools.cpp
-	mgs/MusFiles.cpp
 	ff/ff.c
 	ff/ffsystem.c
 	ff/ffunicode.c
@@ -22,6 +21,7 @@ add_executable(
 	CMsCount.cpp
 	MgspicoSettings.cpp
 	mgspico3z.cpp
+	MusFiles.cpp
 	CReadFileStream.cpp
 )
 
