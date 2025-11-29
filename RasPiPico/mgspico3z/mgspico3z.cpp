@@ -57,25 +57,45 @@
 
 // -----------------------------------------------------------------------------
 // VERSION
-static const char *pFIRMVERSION = "v3.4.0";
+static const char *pFIRMVERSION = "v3.4.1";
 
 // -----------------------------------------------------------------------------
 static char tempWorkPath[255+1];
 static const int  Z80_PAGE_SIZE = 16*1024;
-static uint8_t g_WorkRam[Z80_PAGE_SIZE];
+static uint8_t g_WorkRam[Z80_PAGE_SIZE*2];
 static char g_CurDir[LEN_FILE_PATH_MAX+1] = "\\";	// カレントディレクトリ
 
 // -----------------------------------------------------------------------------
-const uint32_t	ADDR_PLAYER 	= 0x4000;	// player
-const uint32_t	ADDR_DRIVER 	= 0x6000;	// ドライバー(MGS, KINROU5)
-const uint32_t	ADDR_DRIVER_NDP	= 0xC000;	// ドライバー(NDP)
-const uint32_t	ADDR_MUSDT		= 0x8000;	// 楽曲データ(MGS, KINROU5)
-const uint32_t	ADDR_MUSDT_NDP	= 0x4600;	// 楽曲データ(NDP)
+// Z80 メモリ空間にアップロードされて動作するプログラムたち
+const harz80::memaddr_t	FUNC_CUSTOM_PARAMETER= 0x0200;
+// Player
+const harz80::memaddr_t	ADDR_HARZ_PLAYER 	= 0x3000;
+const harz80::memaddr_t	ADDR_HARZ_WORKIF 	= 0x30F0;
+// MGS
+const char *pFN_MGSDRV						= "MGSDRV.COM";
+const harz80::memaddr_t	ADDR_MGS_DRIVER		= 0x6000;
+const harz80::memaddr_t	ADDR_MGS_MUSIC		= 0x8000;
+// KINROU
+const char *pFN_KINROU5 					= "KINROU5.DRV";
+const harz80::memaddr_t	ADDR_KIN5_DRIVER	= 0x6000;
+const harz80::memaddr_t	ADDR_KIN5_MUSIC		= ADDR_MGS_MUSIC;
+// NDP
+const char *pFN_NDP							= "NDP.BIN";
+const harz80::memaddr_t	ADDR_NDP_DRIVER		= 0xC000;
+const harz80::memaddr_t	ADDR_NDP_MUSIC		= 0x4000;
+const harz80::memaddr_t	ADDR_NDP_DEFINE		= 0xB000;		// 音色データ
 
+// -----------------------------------------------------------------------------
 const uint32_t	FADEOUT_TIME		 = 4*1000;	// ms
 const uint32_t	AFTER_1_FADEOUT_TIME = 50;		// ms
 const uint32_t	AFTER_2_FADEOUT_TIME = 950;		// ms	AFTER_1 とAFTER_2は必ず異なる値にする（識別にも使用しているため）
 
+// -----------------------------------------------------------------------------
+#ifdef MGSPICO_3RD_Z
+const char *pFN_MGSPICO_DAT = "MGSPIC3Z.DAT";
+#else
+const char *pFN_MGSPICO_DAT = "MGSPICO.DAT";
+#endif
 
 // -----------------------------------------------------------------------------
 struct INDICATOR
@@ -261,7 +281,50 @@ static void waitForKeyRelease()
 	return;
 }
 
+/**
+ * @brief バイナリファイルを読み込む
+ * @param pFilepath	ファイルパス
+ * @param pBuff		ファイルを格納する領域へのポインタ
+ * @param buffSize	pBuffの領域サイズ
+ * @param pReadSize	読み込んだサイズを格納する領域へのポインタ
+ * @return true:成功、false:失敗
+ */
+static bool loadBinaryFile(
+	const char *pFilepath, uint8_t *pBuff, const int buffSize, UINT *pReadSize)
+{
+	bool bResult = false;
+	if(!sd_fatReadFileFrom(tempWorkPath, buffSize, pBuff, pReadSize) ) {
+#ifdef FOR_DEBUG
+		printf( "Not found %s\n", tempWorkPath);
+#endif
+		bResult = false;
+	}
+	else {
+#ifdef FOR_DEBUG
+		printf( "found %s(%d bytes)\n", tempWorkPath, *pReadSize);
+#endif
+		bResult = true;
+	}
+	return bResult;
+}
 
+static void removeExtension(char *pTemp, char *pTempWorkPath)
+{
+	int len = strlen(pTempWorkPath);
+	int t;
+	for(t = len-1; 0 <= t; --t) {
+		if( pTempWorkPath[t] == '.' ) {
+			strncpy( pTemp, pTempWorkPath, t);
+			pTemp[t] = '\0';
+			break;
+		}
+	}
+	if( t < 0 ) {
+		// 拡張子なし
+		strcpy(pTemp, pTempWorkPath);
+	}
+	return;
+}
 
 static void uploadHarzBios(CHarz80Ctrl &harz)
 {
@@ -279,7 +342,7 @@ static void uploadHarzBios(CHarz80Ctrl &harz)
 
 static void uploadPlayer(CHarz80Ctrl &harz)
 {
-	const uint32_t topAddr = ADDR_PLAYER;
+	const uint32_t topAddr = ADDR_HARZ_PLAYER;
 	const uint8_t *pStart = _binary_harzplay_bin_start;
 	const uint8_t *pEnd = _binary_harzplay_bin_end;
 	const int SZ = (int)pEnd - (int)pStart;
@@ -309,7 +372,7 @@ static bool uploadMGSDRV(CHarz80Ctrl &harz)
 		const uint8_t *pBody;
 		uint16_t bodySize;
 		if( t_Mgs_GetPtrBodyAndSize(reinterpret_cast<const STR_MGSDRVCOM*>(p), &pBody, &bodySize) ) {
-			const uint32_t topAddr = ADDR_DRIVER;
+			const uint32_t topAddr = ADDR_MGS_DRIVER;
 			for( int t = 0; t < (int)bodySize; ++t) {
 				uint32_t addr = (uint32_t)(topAddr + t);
 				uint8_t op = pBody[t];
@@ -338,7 +401,7 @@ static bool uploadKINROU5(CHarz80Ctrl &harz)
 #endif
 		const uint8_t *pBody = &p[7];
 		uint16_t bodySize = readSize-7;
-		const uint32_t topAddr = ADDR_DRIVER;
+		const uint32_t topAddr = ADDR_KIN5_DRIVER;
 		for( int t = 0; t < (int)bodySize; ++t) {
 			uint32_t addr = (uint32_t)(topAddr + t);
 			uint8_t op = pBody[t];
@@ -366,7 +429,7 @@ static bool uploadNDP(CHarz80Ctrl &harz)
 #endif
 		const uint8_t *pBody = &p[7];
 		uint16_t bodySize = readSize-7;
-		const uint32_t topAddr = ADDR_DRIVER_NDP;
+		const uint32_t topAddr = ADDR_NDP_DRIVER;
 		for( int t = 0; t < (int)bodySize; ++t) {
 			uint32_t addr = (uint32_t)(topAddr + t);
 			uint8_t op = pBody[t];
@@ -387,31 +450,35 @@ static bool uploadMusicFileData(
 
 	uint8_t *p = g_WorkRam;
 	UINT readSize = 0;
-	if(!sd_fatReadFileFrom(tempWorkPath, Z80_PAGE_SIZE, p, &readSize) ) {
-		printf( "Not found %s\n", tempWorkPath);
-	}
-	else {
-		printf( "found %s(%d bytes)\n", tempWorkPath, readSize);
-		if( musicType == MUSICTYPE::NDP ) {
-			const uint32_t topAddr = ADDR_MUSDT_NDP;
-			for( int t = 0; t < (int)readSize-7; ++t) {
-				uint32_t addr = (uint32_t)(topAddr + t);
-				uint8_t op = p[t+7];
-				harz.WriteMem1(addr, op);
-			}
-		}
-		else
+
+	bool bRetc = false;
+	switch( musicType )
+	{
+		case MUSICTYPE::NDP :
 		{
-			const uint32_t topAddr = ADDR_MUSDT;
-			for( int t = 0; t < (int)readSize; ++t) {
-				uint32_t addr = (uint32_t)(topAddr + t);
-				uint8_t op = p[t];
-				harz.WriteMem1(addr, op);
-			}
+			// NDP楽曲データの読み込み（先頭7bytesは捨てる）
+			if( !loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
+				break;
+			harz.WriteBlockMem(ADDR_NDP_MUSIC, &p[7], readSize-7);
+			// NDP音色データ読み込みを試みる（先頭7bytesは捨てる）
+			char temp[LEN_FILE_PATH_MAX+1];
+			removeExtension(temp, tempWorkPath);
+			sprintf(tempWorkPath, "%s.NDD", temp);
+			if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
+				harz.WriteBlockMem(ADDR_NDP_DEFINE, &p[7], readSize-7);
+			bRetc = true;
+			break;
 		}
-		return true;
+		default:
+		{
+			if( !loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
+				break;
+			harz.WriteBlockMem(ADDR_MGS_MUSIC, p, readSize);
+			bRetc = true;
+			break;
+		}
 	}
-	return false;
+	return bRetc;
 }
 
 static void setupHarz(CHarz80Ctrl harz, const MgspicoSettings stt)
@@ -444,7 +511,7 @@ static void setupHarz(CHarz80Ctrl harz, const MgspicoSettings stt)
 	//
 	uploadPlayer(harz);	
 	// 0x00=MGSDRV、0x01=KINROU5、0x02=NDP, 0x03=VGM, 0x04=TGF
-	harz.WriteMem1(0x4020, (uint8_t)stt.GetMusicType());
+	harz.WriteMem1(ADDR_HARZ_WORKIF+0, (uint8_t)stt.GetMusicType());
 
 	// Sound driver の upload
 	switch(stt.GetMusicType())
@@ -478,13 +545,18 @@ static void dislplayTitle(CSsd1306I2c &disp, const MUSICTYPE musType)
 	disp.Strings8x16(3*8+0, 0*16, "MGSPICO 3z", true);
 	disp.Strings8x16(8*8+0, 1*16, pFIRMVERSION, true);
 	disp.Strings8x16(1*8+0, 2*16, "by harumakkin", false);
-	const char *pForDrv[] = {
+	const char *pForDrvNames[] = {
 		" --- MGS --- ",
 		" - MuSICA -  ",
 		" --- NDP --- ",
 		" --- VGM --- ",
-		" --- TGF --- "};
-	disp.Strings8x16(1*8+0, 3*16, pForDrv[(int)musType], false);
+		" --- TGF --- ",
+	};
+	const char *pDrvName =
+		(musType < MUSICTYPE::MAX_NUM)
+		? pForDrvNames[(int)musType]
+		: " # Unknown # ";
+	disp.Strings8x16(1*8+0, 3*16, pDrvName, false);
 	disp.Present();
 	return;
 }
@@ -1723,7 +1795,11 @@ static void dsipSttMenu(
 	const int seleChoice, const bool bCursor)
 {
 	disp.Strings8x16(0, y, item.pName);
-	disp.Strings8x16(7*10, y, item.pChoices[seleChoice], bCursor);
+	const char *pC =
+		(seleChoice < item.num)
+		? item.pChoices[seleChoice]
+		: "Unknown";
+	disp.Strings8x16(7*10, y, pC, bCursor);
 	if( bCursor )
 		disp.Line(0, y+13, 80, y+13, true);
 	return;

@@ -90,6 +90,16 @@ BIOS:
 	.OUTDLP		equ			0x014D
 	.KILBUF		equ			0x0156
 	.CALBAS		equ			0x0159
+;
+	.CHGCPU		equ			0x0180
+	.GETCPU		equ			0x0183
+	.PCMPLY		equ			0x0186
+	.PCMREC		equ			0x0189
 
+SYSWORK:
+	.JIFFY		equ			0xfc9e		; word.
 
-
+ORG_HARZENTRY	equ			0x3000		; エントリーポイント
+ORG_INTRENTRY	equ			0x3040
+ORG_WORKIF		equ			0x30F0
+ORG_CODE		equ			0x3100

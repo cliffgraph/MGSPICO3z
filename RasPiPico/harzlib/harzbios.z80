@@ -5,10 +5,6 @@
 include "msxbios.inc"
 
 ;-----------------------------------------------------------------------------
-org DOS.SYSTEMCALL
-	jp	FUNC_DOS_SYSTEMCALL
-
-;-----------------------------------------------------------------------------
 ; entry area of BIOS
 ;-----------------------------------------------------------------------------
 org BIOS.CHKRAM
@@ -175,33 +171,35 @@ org BIOS.KILBUF
 	jp	UNDER_CONSTRUCTION		; 非実装
 org BIOS.CALBAS
 	jp	UNDER_CONSTRUCTION		; 非実装
+;
+org BIOS.CHGCPU
+	jp	UNDER_CONSTRUCTION		; 非実装
+org BIOS.GETCPU
+	jp	UNDER_CONSTRUCTION		; 非実装
+org BIOS.PCMPLY
+	jp	UNDER_CONSTRUCTION		; 非実装
+org BIOS.PCMREC
+	jp	UNDER_CONSTRUCTION		; 非実装
+
+;-----------------------------------------------------------------------------
+org DOS.SYSTEMCALL
+	jp	FUNC_DOS_SYSTEMCALL
 
 ; -----------------------------------------------------------------------------
 org	0x0200
 FUNC_CUSTOM_PARAMETER:
+	.mainrom_ver
+		db	0x00	; MAIN ROMのバージョン番号 0=MSX, 1=MSX2, 2=MSX2+, 3=MSXturboR
 	.cpu_arch
-		db	0x00				; 0=Z80, 1=R800+ROM, 2=R800+DRAM
+		db	0x00	; 0=Z80, 1=R800+ROM, 2=R800+DRAM
 
+; -----------------------------------------------------------------------------
 org	0x0210
 FUNC_DOS_SYSTEMCALL:
 	.begin
 		xor		A
 		ld		B, A
 		ret
-
-SETUP_SYSTEM:
-	.begin
-		di
-		im		0
-		ld		H, 0xE0
-		ld		L, 0x00
-		ld		SP, HL
-		;
-		ld		A, 0b111111		; LED全点灯
-		out		(0x00), A
-		;
-		jp		0x4000			; 
-
 UNDER_CONSTRUCTION:
 	.begin
 		ld		A, 0b100001
@@ -210,13 +208,28 @@ UNDER_CONSTRUCTION:
 		;ret
 
 ; -----------------------------------------------------------------------------
+SETUP_SYSTEM:
+	.begin
+		di
+		im		1
+		; スタック領域の設定
+		ld		HL, 0xefff
+		ld		SP, HL
+		; LED全点灯
+		ld		A, 0b111111
+		out		(0x00), A
+		; 
+		jp		ORG_HARZENTRY
+
+
+; -----------------------------------------------------------------------------
 ; 指定したスロット＆アドレスの値を読み出す。
 ;		ただし、ページ0範囲内だった場合は、A=0を返す
 FUNC_RDSLT:
 	.begin
 		di
-		; スロット0の002dh番地(ページ0)の値を読みだそうとしていたら、0x02(MSX2+)を返す
-		;	スロット0で002dh以外の番地を読みだそうとしていたら、0x00を返す
+		; スロット0の002dh番地(ページ0)の値を読みだそうとしていたら、mainrom_verの値を返す
+		; スロット0で002dh以外の番地を読みだそうとしていたら、0x00を返す
 		or		A
 		jr		nz, .truebegin
 		cp 		H			;if H == 0 
@@ -224,7 +237,7 @@ FUNC_RDSLT:
 		ld		A, 0x2d
 		cp		L
 		jr		nz, .@0
-		ld		A, 0x03	; 2=MSX2+, 3=turboR
+		ld		A, (FUNC_CUSTOM_PARAMETER.mainrom_ver)
 		ret
 	.@0
 		xor		A
@@ -273,6 +286,7 @@ FUNC_RDSLT:
 		ld		A, B			; A = 対象スロットの(HL)の値
 	.end
 		ret
+
 ; -----------------------------------------------------------------------------
 ; 指定したスロット＆アドレスの値を読み出す。
 ;		ただし、ページ0範囲内だった場合は、何もせずに返す
@@ -369,17 +383,17 @@ FUNC_ENASLT:
 		ld		A, C
 		ld		(HL), A
 		ret
+
 ; -----------------------------------------------------------------------------
 FUNC_CALSLT:
 	.begin
 		; do nothing
-
 	.getcpu	; 0183H
 		push	IY		; IYの上位バイト=スロット番号
 		pop		HL
 		ld		A, H
 		or		A
-		ret		nz
+		ret		nz		; スロット番号が0以外なら、処理終了
 		push	IX		; IX=呼び出しアドレス
 		pop		HL
 		ld		A, H
@@ -387,10 +401,16 @@ FUNC_CALSLT:
 		ret		nz
 		ld		A, L
 		cp		0x83
-		ret		nz
+		ret		nz		; 0183h以外なら処理終了
 		;
 		ld		A, (FUNC_CUSTOM_PARAMETER.cpu_arch)	; CPU動作を返す
 		ret
+
+; -----------------------------------------------------------------------------
+FUNC_KEYINT:
+	.begin
+		jp		ORG_INTRENTRY
+
 ; -----------------------------------------------------------------------------
 FUNC_CALLF:
 	.begin
@@ -399,17 +419,6 @@ FUNC_CALLF:
 		ld		A, 0b111100
 		out		(0x00), A		; 未実装BIOSがコールされた
 		halt
-
-		ret
-; -----------------------------------------------------------------------------
-FUNC_KEYINT:
-	.begin
-		; do nothing
-
-		ld		A, 0b111110
-		out		(0x00), A		; 未実装BIOSがコールされた
-		halt
-
 		ret
 
 	
