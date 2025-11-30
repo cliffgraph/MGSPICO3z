@@ -8,6 +8,7 @@
 MusFiles::MusFiles() 
 {
 	m_NumFiles = 0;
+	m_SpecialFileName[0] = '\0';
 	return;
 }
 
@@ -130,6 +131,32 @@ MusFiles::DeleteTermPath(char *pPath)
 	return;
 }
 
+bool
+MusFiles::FindFirstByWild(const char *pDir, const char *pWild, char *pFoundFileName)
+{
+	static FATFS g_fs;
+    FRESULT ret = f_mount( &g_fs, "", 1 );
+    if( ret != FR_OK ) {
+        return false;
+    }
+
+	bool bFound = false;
+	DIR dirObj;
+	FILINFO fno;
+	FRESULT fr = f_findfirst(&dirObj, &fno, pDir, pWild);
+    while (fr == FR_OK && fno.fname[0] ) {
+		if( !((fno.fattrib & AM_DIR)!=0)) {			// ディレクトリ、ではないモノ
+			strcpy(pFoundFileName, fno.fname);
+			bFound = true;
+			break;
+		}
+        fr = f_findnext(&dirObj, &fno); 
+    }
+
+	f_closedir(&dirObj);
+	return bFound;
+};
+
 void
 MusFiles::ClearList()
 {
@@ -139,12 +166,20 @@ MusFiles::ClearList()
 }
 
 void
-MusFiles::ReadFileNames(const char *pWild, const char *pCurDir)
+MusFiles::ListupFileNames(const char *pWild, const char *pCurDir)
 {
 	m_NumItems = 0;
 	m_NumFiles = 0;
 	listupDirs(m_Files, &m_NumItems, pCurDir);
 	listupFiles(m_Files, &m_NumItems, &m_NumFiles, pWild, pCurDir);
+	return;
+}
+
+void
+MusFiles::SearchSpecialFile(const char *pWild, const char *pCurDir)
+{
+	if( !FindFirstByWild(pCurDir, pWild, m_SpecialFileName) )
+		m_SpecialFileName[0] = '\0';
 	return;
 }
 
@@ -196,4 +231,10 @@ MusFiles::GetDirName(const int no) const
 	if( pF->no == 0 )
 		return pF->name;
 	return nullptr;
+}
+
+const char *
+MusFiles::GetSpecialFileName() const
+{
+	return m_SpecialFileName;
 }

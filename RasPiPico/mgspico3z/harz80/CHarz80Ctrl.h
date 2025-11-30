@@ -18,7 +18,7 @@ public:
 public:
 	void Setup();
 	void WritePsram(const uint32_t addr, const uint8_t dt8);
-	uint8_t RaedPsram(const uint32_t addr);
+	uint8_t ReadPsram(const uint32_t addr);
 	void OutputIo(const harz80::ioaddr_t addr, const uint8_t dt8);
 	uint8_t InputIo(const harz80::ioaddr_t addr);
 	void WriteMem1(const harz80::memaddr_t addr, const uint8_t dt8);

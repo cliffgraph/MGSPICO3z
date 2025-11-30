@@ -57,7 +57,7 @@
 
 // -----------------------------------------------------------------------------
 // VERSION
-static const char *pFIRMVERSION = "v3.4.1";
+static const char *pFIRMVERSION = "v3.4.2";
 
 // -----------------------------------------------------------------------------
 static char tempWorkPath[255+1];
@@ -84,8 +84,13 @@ const char *pFN_NDP							= "NDP.BIN";
 const harz80::memaddr_t	ADDR_NDP_DRIVER		= 0xC000;
 const harz80::memaddr_t	ADDR_NDP_MUSIC		= 0x4000;
 const harz80::memaddr_t	ADDR_NDP_DEFINE		= 0xB000;		// 音色データ
-
+// MUDRV
+const char *pFN_MUDRV						= "MUDRV.COM";
+const harz80::memaddr_t	ADDR_MUDRV_DRIVER	= 0xC400;
+const harz80::memaddr_t	ADDR_MUDRV_MUSIC	= 0x8000;		// オリジナルは、0xB600。大戦略2の曲は4KB、幻影都市の曲は5KBあるので大きくする
+const harz80::memaddr_t	ADDR_MUDRV_KIK		= 0xC200;		// 音色データ
 // -----------------------------------------------------------------------------
+
 const uint32_t	FADEOUT_TIME		 = 4*1000;	// ms
 const uint32_t	AFTER_1_FADEOUT_TIME = 50;		// ms
 const uint32_t	AFTER_2_FADEOUT_TIME = 950;		// ms	AFTER_1 とAFTER_2は必ず異なる値にする（識別にも使用しているため）
@@ -148,6 +153,7 @@ struct MGSPICOWORKS
 	bool bReadErrMGSDRV;
 	bool bReadErrKINROU5;
 	bool bReadErrNDP;
+	bool bReadErrMUDRV;
 	int MasterVolume;
 
 	MGSPICOWORKS()
@@ -155,6 +161,7 @@ struct MGSPICOWORKS
 		bReadErrMGSDRV = false;
 		bReadErrKINROU5 = false;
 		bReadErrNDP = false;
+		bReadErrMUDRV = false;
 		MasterVolume = 15;
 		return;
 	}
@@ -331,7 +338,7 @@ static void uploadHarzBios(CHarz80Ctrl &harz)
 	const harz80::memaddr_t topAddr = 0x0000;
 	const uint8_t *pStart = _binary_harzbios_bin_start;
 	const uint8_t *pEnd = _binary_harzbios_bin_end;
-	const int SZ = (int)pEnd - (int)pStart;
+	const int SZ = (int)pEnd - (int)pStart + 1;
 
 #ifdef FOR_DEBUG
 	printf("Upload HarzBIOS to %04Xh\n", topAddr);
@@ -340,15 +347,15 @@ static void uploadHarzBios(CHarz80Ctrl &harz)
 	return;
 }
 
-static void uploadPlayer(CHarz80Ctrl &harz)
+static void uploadHarzPlayer(CHarz80Ctrl &harz)
 {
-	const uint32_t topAddr = ADDR_HARZ_PLAYER;
+	const harz80::memaddr_t topAddr = ADDR_HARZ_PLAYER;
 	const uint8_t *pStart = _binary_harzplay_bin_start;
 	const uint8_t *pEnd = _binary_harzplay_bin_end;
-	const int SZ = (int)pEnd - (int)pStart;
+	const int SZ = (int)pEnd - (int)pStart + 1;
 
 #ifdef FOR_DEBUG
-	printf("Upload Player(ctrldrv) to %04Xh\n", topAddr);
+	printf("Upload HarzPlayer to %04Xh\n", (uint32_t)topAddr);
 #endif
 	harz.WriteBlockMem(topAddr, pStart, SZ);
 	return;
@@ -359,25 +366,11 @@ static bool uploadMGSDRV(CHarz80Ctrl &harz)
 	uint8_t *p = g_WorkRam;
 	sprintf(tempWorkPath, "%s", pFN_MGSDRV);
 	UINT readSize = 0;
-	if(!sd_fatReadFileFrom(tempWorkPath, Z80_PAGE_SIZE, p, &readSize) ) {
-#ifdef FOR_DEBUG
-		printf( "Not found %s\n", tempWorkPath);
-#endif
-		return false;
-	}
-	else {
-#ifdef FOR_DEBUG
-		printf( "found %s(%d bytes)\n", tempWorkPath, readSize);
-#endif
+	if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ) {
 		const uint8_t *pBody;
 		uint16_t bodySize;
 		if( t_Mgs_GetPtrBodyAndSize(reinterpret_cast<const STR_MGSDRVCOM*>(p), &pBody, &bodySize) ) {
-			const uint32_t topAddr = ADDR_MGS_DRIVER;
-			for( int t = 0; t < (int)bodySize; ++t) {
-				uint32_t addr = (uint32_t)(topAddr + t);
-				uint8_t op = pBody[t];
-				harz.WriteMem1(addr, op);
-			}
+			harz.WriteBlockMem(ADDR_MGS_DRIVER, pBody, bodySize);
 			return true;
 		}
 	}
@@ -386,27 +379,11 @@ static bool uploadMGSDRV(CHarz80Ctrl &harz)
 
 static bool uploadKINROU5(CHarz80Ctrl &harz)
 {
-	uint8_t *p = g_WorkRam;
 	sprintf(tempWorkPath, "%s", pFN_KINROU5);
 	UINT readSize = 0;
-	if(!sd_fatReadFileFrom(tempWorkPath, Z80_PAGE_SIZE, p, &readSize) ) {
-#ifdef FOR_DEBUG
-		printf( "Not found %s\n", tempWorkPath);
-#endif
-		return false;
-	}
-	else {
-#ifdef FOR_DEBUG
-		printf( "found %s(%d bytes)\n", tempWorkPath, readSize);
-#endif
-		const uint8_t *pBody = &p[7];
-		uint16_t bodySize = readSize-7;
-		const uint32_t topAddr = ADDR_KIN5_DRIVER;
-		for( int t = 0; t < (int)bodySize; ++t) {
-			uint32_t addr = (uint32_t)(topAddr + t);
-			uint8_t op = pBody[t];
-			harz.WriteMem1(addr, op);
-		}
+	uint8_t *p = g_WorkRam;
+	if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ) {
+		harz.WriteBlockMem(ADDR_KIN5_DRIVER, &p[7], readSize-7);
 		return true;
 	}
 	return false;
@@ -414,27 +391,23 @@ static bool uploadKINROU5(CHarz80Ctrl &harz)
 
 static bool uploadNDP(CHarz80Ctrl &harz)
 {
-	uint8_t *p = g_WorkRam;
 	sprintf(tempWorkPath, "%s", pFN_NDP);
 	UINT readSize = 0;
-	if(!sd_fatReadFileFrom(tempWorkPath, Z80_PAGE_SIZE, p, &readSize) ) {
-#ifdef FOR_DEBUG
-		printf( "Not found %s\n", tempWorkPath);
-#endif
-		return false;
+	uint8_t *p = g_WorkRam;
+	if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ) {
+		harz.WriteBlockMem(ADDR_NDP_DRIVER, &p[7], readSize-7);
+		return true;
 	}
-	else {
-#ifdef FOR_DEBUG
-		printf( "found %s(%d bytes)\n", tempWorkPath, readSize);
-#endif
-		const uint8_t *pBody = &p[7];
-		uint16_t bodySize = readSize-7;
-		const uint32_t topAddr = ADDR_NDP_DRIVER;
-		for( int t = 0; t < (int)bodySize; ++t) {
-			uint32_t addr = (uint32_t)(topAddr + t);
-			uint8_t op = pBody[t];
-			harz.WriteMem1(addr, op);
-		}
+	return false;
+}
+
+static bool uploadMUDRV(CHarz80Ctrl &harz)
+{
+	sprintf(tempWorkPath, "%s", pFN_MUDRV);
+	UINT readSize = 0;
+	uint8_t *p = g_WorkRam;
+	if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ) {
+		harz.WriteBlockMem(ADDR_MUDRV_DRIVER, p, readSize);
 		return true;
 	}
 	return false;
@@ -460,13 +433,51 @@ static bool uploadMusicFileData(
 			if( !loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
 				break;
 			harz.WriteBlockMem(ADDR_NDP_MUSIC, &p[7], readSize-7);
-			// NDP音色データ読み込みを試みる（先頭7bytesは捨てる）
+			// NDP音色データを読み込む（先頭7bytesは捨てる）
 			char temp[LEN_FILE_PATH_MAX+1];
 			removeExtension(temp, tempWorkPath);
 			sprintf(tempWorkPath, "%s.NDD", temp);
 			if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
 				harz.WriteBlockMem(ADDR_NDP_DEFINE, &p[7], readSize-7);
 			bRetc = true;
+			break;
+		}
+		case MUSICTYPE::MUDRV :
+		{
+			// 楽曲データを読み込み
+			if( !loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) )
+				break;
+			if( memcmp(p, "bgm\0", 4) == 0 || memcmp(p, "BGM\0", 4) == 0 ){		// bgm, BGM
+				if( memcmp(&p[16], "\x0A\x07", 2) != 0 ){
+					harz.WriteBlockMem(ADDR_MUDRV_MUSIC, &p[16], readSize-16);	// 先頭の16bytesを除く
+					//
+					if( p[6] != '\0' ){
+						// +6の位置から8文字分を読み込む。この文字列は音色データのファイル名を示す
+						char ki2name[8+1+3+1];
+						memcpy(ki2name, &p[6], 8);
+						ki2name[8] = '\0';
+						strcat(ki2name, ".ki2");
+						sprintf(tempWorkPath, "%s\\%s", pCurDir, ki2name);
+						if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ){
+							harz.WriteBlockMem(ADDR_MUDRV_KIK, &p[16], readSize-16);
+						}
+					}
+					bRetc = true;
+				}
+			}
+			else {
+				// 
+				harz.WriteBlockMem(ADDR_MUDRV_MUSIC, p, readSize);
+				// 代表音色データ(*.kik)を使う
+				const char *pSFN = files.GetSpecialFileName();
+				if( pSFN[0] != '\0' ){
+					sprintf(tempWorkPath, "%s\\%s", pCurDir, pSFN);
+					if( loadBinaryFile(tempWorkPath, p, sizeof(g_WorkRam), &readSize) ){
+						harz.WriteBlockMem(ADDR_MUDRV_KIK, p, readSize);
+					}
+				}
+				bRetc = true;
+			}
 			break;
 		}
 		default:
@@ -507,11 +518,15 @@ static void setupHarz(CHarz80Ctrl harz, const MgspicoSettings stt)
 	harz.WriteMem1(0xFD9F, 0xc9);	// H.TIMI
 	// 
 	uploadHarzBios(harz);
-	harz.WriteMem1(0x0200+0, 0x01);				// 0=Z80, 1=R800+ROM, 2=R800+DRAM
+	harz.WriteMem1(FUNC_CUSTOM_PARAMETER+0, 0x03);	// MAIN ROMのバージョン番号 (0=MSX, 1=MSX2, 2=MSX2+, 3=MSXturboR)
+	harz.WriteMem1(FUNC_CUSTOM_PARAMETER+1, 0x01);	// MSXturboRの動作モード (0=Z80, 1=R800+ROM, 2=R800+DRAM)
 	//
-	uploadPlayer(harz);	
+	uploadHarzPlayer(harz);	
 	// 0x00=MGSDRV、0x01=KINROU5、0x02=NDP, 0x03=VGM, 0x04=TGF
 	harz.WriteMem1(ADDR_HARZ_WORKIF+0, (uint8_t)stt.GetMusicType());
+	// MUDRV_DRIVER楽曲データ先頭アドレス
+	harz.WriteMem1(ADDR_HARZ_WORKIF+1, ((ADDR_MUDRV_MUSIC >> 0) & 0xff));
+	harz.WriteMem1(ADDR_HARZ_WORKIF+2, ((ADDR_MUDRV_MUSIC >> 8) & 0xff));
 
 	// Sound driver の upload
 	switch(stt.GetMusicType())
@@ -524,6 +539,9 @@ static void setupHarz(CHarz80Ctrl harz, const MgspicoSettings stt)
 			break;
 		case MUSICTYPE::NDP:
 			g_Works.bReadErrNDP = !uploadNDP(harz);
+			break;
+		case MUSICTYPE::MUDRV:
+			g_Works.bReadErrMUDRV = !uploadMUDRV(harz);
 			break;
 		case MUSICTYPE::VGM:
 		case MUSICTYPE::TGF:
@@ -551,6 +569,7 @@ static void dislplayTitle(CSsd1306I2c &disp, const MUSICTYPE musType)
 		" --- NDP --- ",
 		" --- VGM --- ",
 		" --- TGF --- ",
+		" -- MUDRV -- ",
 	};
 	const char *pDrvName =
 		(musType < MUSICTYPE::MAX_NUM)
@@ -614,14 +633,25 @@ static void listupMusicFiles(MusFiles *pFiles, const MUSICTYPE musicType)
 		case MUSICTYPE::NDP:	pWild = "*.NDP";	break;
 		case MUSICTYPE::VGM:	pWild = "*.VGM";	break;
 		case MUSICTYPE::TGF:	pWild = "*.TGF";	break;
-		default:													break;
+		case MUSICTYPE::MUDRV:	pWild = "*.MUD";	break;
+		default:									break;
 	}
 	if( pWild == nullptr ) {
 		pFiles->ClearList();
 	}
 	else{
-		pFiles->ReadFileNames(pWild, g_CurDir);
+		pFiles->ListupFileNames(pWild, g_CurDir);
 	}
+
+	switch(musicType)
+	{
+		case MUSICTYPE::MUDRV:
+			pFiles->SearchSpecialFile("*.KIK", g_CurDir);
+			break;
+		default:
+			break;
+	}
+
 	return;
 }
 
@@ -860,12 +890,12 @@ static bool playMusic(
 	const int selectFileNo, IStreamPlayer *pStrmP )
 {
 	bool bRetc = false;
-
 	switch( musicType )
 	{
 		case MUSICTYPE::MGS:
 		case MUSICTYPE::KIN5:
 		case MUSICTYPE::NDP:
+		case MUSICTYPE::MUDRV:
 		{
 			harz.SetCCmd(harz80::CCMD_STOP);
 			// NOTE: 
@@ -880,8 +910,8 @@ static bool playMusic(
 			harz.OutputIo(0xA8, 0b11111111);
 			if( uploadMusicFileData(harz, pCurDir, files, selectFileNo, musicType) ){
 				harz.SetBusak(1);
+				harz.SetCCmd(harz80::CCMD_PLAY);
 			}
-			harz.SetCCmd(harz80::CCMD_PLAY);
 			bRetc = true;
 			break;
 		}
@@ -914,6 +944,7 @@ static void stopMusic(PLAYWORK *pPw, CHarz80Ctrl &harz, IStreamPlayer *pStrmP)
 		case MUSICTYPE::MGS:
 		case MUSICTYPE::KIN5:
 		case MUSICTYPE::NDP:
+		case MUSICTYPE::MUDRV:
 		default:
 			harz.SetCCmd(harz80::CCMD_STOP);
 			break;
@@ -928,6 +959,7 @@ static void fadeoutMusic(PLAYWORK *pPw, CHarz80Ctrl &harz, IStreamPlayer *pStrmP
 		case MUSICTYPE::MGS:
 		case MUSICTYPE::KIN5:
 		case MUSICTYPE::NDP:
+		case MUSICTYPE::MUDRV:
 			harz.SetCCmd(harz80::CCMD_FADEOUT);
 			break;
 		case MUSICTYPE::VGM:
@@ -951,6 +983,7 @@ static void  setVolumeMusic(const MUSICTYPE musicType, CHarz80Ctrl &harz, const 
 		case MUSICTYPE::MGS:
 		case MUSICTYPE::KIN5:
 		case MUSICTYPE::NDP:
+		case MUSICTYPE::MUDRV:
 			harz.SetCCmdData((uint8_t)(15-v));
 			harz.SetCCmd(harz80::CCMD_VOLUME);
 			break;
@@ -969,7 +1002,7 @@ static bool downloadHarzInfo(CHarz80Ctrl &harz, harz80::WRWKRAM *pInfo)
 	static uint8_t oldCnt = 0;
 	harz.ReadStatus(reinterpret_cast<uint8_t*>(pInfo), sizeof(*pInfo));
 	bool bUpdate = false;
-	if( oldCnt != pInfo->update_counter )	{
+	if( oldCnt != pInfo->update_counter ) {
 		oldCnt = pInfo->update_counter;
 		bUpdate = true;
 //#define FOR_DEBUG_PRINT_STATUS
@@ -995,17 +1028,15 @@ static bool makeSoundIndicator(
 	const int num_trks = pIndi->NUM_TRACKS;
 	for( int trk = 0; trk < num_trks; ++trk ) { 
 		int16_t cnt = 0;
-		if( musicType == MUSICTYPE::MGS ) {
-			cnt = wk.info.mgs.GATETIME[trk];					// PSGx3,SCCx5,FMx9 の順のまま採用
-		}
-		else if( musicType == MUSICTYPE::KIN5 ) {
-			cnt = wk.info.mgs.GATETIME[(trk+9)%num_trks];		// FMx9,PSGx3,SCCx5を、PSGx3,SCCx5,FMx9 の順になるように読みだす
-		}
-		else if( musicType == MUSICTYPE::NDP ) {
-			cnt = (trk < 4) ? wk.info.mgs.GATETIME[trk] : 0;	// PSGx3,RHx1
-		}
-		else {
-			// do nothing;
+		switch( musicType )
+		{
+			case MUSICTYPE::MGS:	cnt = wk.info.mgs.GATETIME[trk];					break;	// PSGx3,SCCx5,FMx9 の順のまま採用
+			case MUSICTYPE::KIN5:	cnt = wk.info.mgs.GATETIME[(trk+9)%num_trks];		break;	// FMx9,PSGx3,SCCx5を、PSGx3,SCCx5,FMx9 の順になるように読みだす
+			case MUSICTYPE::NDP:	cnt = (trk < 4) ? wk.info.mgs.GATETIME[trk] : 0;	break;	// PSGx3,RHx1
+			case MUSICTYPE::VGM:	break;
+			case MUSICTYPE::TGF:	break;
+			case MUSICTYPE::MUDRV:	cnt = wk.info.mgs.GATETIME[trk];					break;
+			default:				break;
 		}
 		INDICATOR::TRACK &tk = pIndi->tk[trk];
 		auto oldLvl = tk.DispLvl;
@@ -1369,11 +1400,24 @@ static void tasks(
 		case MUSICTYPE::MGS:
 		case MUSICTYPE::KIN5:
 		case MUSICTYPE::NDP:
+		case MUSICTYPE::MUDRV:
 		{
 			harz80::WRWKRAM harzInfo;
 			// Harzから受信した再生情報や時間経過をもとにIndicator描画用の情報を作成する
 			bool bUpdate = downloadHarzInfo(harz, &harzInfo);
 			makeSoundIndicator(nowTime, harzInfo, g_Setting.GetMusicType(), &pPw->indi);
+
+// haruma
+// if( (((reinterpret_cast<uint16_t*>(&harzInfo))[22])&0xfff0) == 0xcc00 ){
+// 	printf( "x " );
+// 	for(int t = 0 ; t < 46/2; ++t )
+// 		printf( "%04X ", (reinterpret_cast<uint16_t*>(&harzInfo))[t]);
+// 	printf( "\n" );
+// }
+// harzInfo.play_time = 10;
+// harzInfo.type = 5;
+// memset( &harzInfo.info, 0x01, sizeof( harzInfo.info ) );
+
 			// 
 			if( bUpdate ){
 				// 再生直後のIGNORING_TIME[ms]期間は無視する
@@ -1498,24 +1542,38 @@ static void handler_EVENT_KB_INPUT(const EVENT_DT &dt)
 static void handler_EVENT_KEYSW(
 	const EVENT_DT &evdt, const MusFiles &files, PLAYWORK *pPw)
 {
+	static CMsCount pressApllyTim;
+
 	switch(evdt.KeyCode)
 	{
 		case KEY_APPLY:
 		{
+			// 押した
 			if( evdt.Action == KEYSTS_PUSH ){
 				pPw->shift = SHIFT_APPLY;
+				pressApllyTim.Reset(700);
 			}
 			else {
+				// 離した
 				if( pPw->shift == SHIFT_APPLY ){
-					if( pPw->playNo != 0 && pPw->curNo==pPw->playNo ){
+					// 700ms以上押して離した場合は再生停止
+					if( pPw->playNo != 0 && pressApllyTim.IsTimeOut() ){
+						pressApllyTim.Cancel();
+						g_Events.Post(EVENT_REQ_STOP);
+					}
+					// 
+					else if( pPw->playNo != 0 && pPw->curNo==pPw->playNo ){
+						pressApllyTim.Cancel();
 						g_Events.Post(EVENT_REQ_STOP);
 					}
 					else {
 						const char *pDir = files.GetDirName(pPw->curNo);
 						if( pDir != nullptr ){
+							pressApllyTim.Cancel();
 							g_Events.Post(EVENT_REQ_CHDIR, pPw->curNo);
 						}
 						else {
+							pressApllyTim.Cancel();
 							g_Events.Post(EVENT_REQ_SET_VOLUME);
 							g_Events.Post(EVENT_REQ_STOP);
 							g_Events.Post(EVENT_REQ_PLAY, pPw->curNo);
@@ -1580,7 +1638,10 @@ static void dispPlayer(
 
 	disp.ResetI2C();
 	disp.Clear();
-	if( !(pw.MusicType == MUSICTYPE::TGF || pw.MusicType == MUSICTYPE::VGM) ){
+	if( pw.MusicType == MUSICTYPE::TGF || pw.MusicType == MUSICTYPE::VGM ){
+		// do nothing
+	}
+	else {
 		displaySoundIndicator(disp, &pw.indi, true, pw.MusicType);
 	}
 	displayPlayFileName(disp, files, pw.topFileNo, pw.curNo);
@@ -1965,6 +2026,8 @@ static void dispError(CSsd1306I2c &disp, MGSPICOWORKS &wk)
 		displayNotFound(disp, pFN_KINROU5);
 	else if( g_Works.bReadErrNDP )
 		displayNotFound(disp, pFN_NDP);
+	else if( g_Works.bReadErrMUDRV )
+		displayNotFound(disp, pFN_MUDRV);
 	return;
 }
 
@@ -2021,6 +2084,9 @@ int main()
 			break;
 		case MUSICTYPE::NDP:
 			bDriverErr = g_Works.bReadErrNDP;
+			break;
+		case MUSICTYPE::MUDRV:
+			bDriverErr = g_Works.bReadErrMUDRV;
 			break;
 		case MUSICTYPE::TGF:
 			pStrmP = GCC_NEW CTgfPlayer(pHarz);

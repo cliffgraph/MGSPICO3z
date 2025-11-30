@@ -1,5 +1,5 @@
 # MGSPICO3z 
-2025/11/29 harumakkin
+2025/11/30 harumakkin
 
 ![mgspico3-01](docs/pics/mgspico3.png)</br>**fig.1 MGSPICO3z**
 
@@ -50,20 +50,22 @@ MGSPICO3zではTangNano9K内に、Z80 CPU(TV80)を実装しMGSDRVとKINROU5に�
 - 設定内容はmicroSDカード内にファイル（\MGSPIC3Z.DAT）として保存されます。電源ON時に読み込まれ使用されます。
 - 設定内容は下記の下記の通り
 
-##### NDPv1.04の16KBを超える曲データの再生を行うには
-- mgspico3z_firmware_v3.4.1以降では、NDPの16KBを超える曲データの再生ができるようになりましたが、再生のための準備が必要です。
-- #EXPAND-MEMORYヘッダが付加されて作成された曲データが対象です。この曲データをNDP MML Compiler で、"名前を付けて曲データをBSAVE形式で保存"で .NDP ファイルを生成した後、必ず"名前を付けて効果音データをBSAVE形式で保存"で.NDDファイルも生成してください。
-- この .NDPファイルと.NDDファイルの名称は同じにしてください。MGSPICOシリーズはロングファイル名や漢字文字に対応していませんので、英数アルファベット最大8文字で名付けてください。例) GAME001.NDP、GAME001.NDD
-- .NDPファイルと.NDDファイルをSDカードにコピーしてください。.NDDファイルが欠けるとMGSPICO3zは正しく動作しません。
-
 |項目|選択項目|
 |:-|:-|
-|music|再生するデータファイル形式を指定する<br>現バージョンでは混在での再生は行えない<br>{MGS,MuSICA,NDP,VGM,TGF}|
+|music|再生するデータファイル形式を指定する<br>現バージョンでは混在での再生は行えない<br>{MGS,MuSICA,NDP,VGM,TGF,MUDRV}|
 |loop cnt|次の曲を再生するまでの、再生回数を指定する<br>0を選択すると同じ曲を再生し続ける<br>1～3を選択すると選択した回数再生が行われた後フェードアウトが起こり次の曲に再生が移る。<br>{0, 1, 2, 3}|
 |auto run|電源ON後、演奏を自動的に開始する<br>ただしルートディレクトリに再生可能なデータファイルがある時のみ<br>{OFF, ON}|
 |random|ランダム再生機能をONにした状態で起動する<br>{OFF, ON}|
 |use.SCC| (将来機能)使用するSCCデザインを選択する<br>（現バージョンでは、IKASCC固定である。将来用）|
 |harz clk|MGS,MuSICA,NDPを再生するときのZ80互換CPUの動作クロックを指定する。CPU負荷の高い楽曲データの再生時に7.16MHzを選択する<br>{3.58MHz, 7.16MHz}<br>※RaspberryPiPicoの動作クロックではない|
+
+##### NDPv1.04の16KBを超える曲データの再生を行うには
+- mgspico3z_firmware_v3.4.1以降では、NDPの16KBを超える曲データの再生ができるようになりましたが、再生のための準備が必要です。
+- #EXPAND-MEMORYヘッダが付加されて作成された曲データが対象です。この曲データをNDP MML Compiler で、"名前を付けて曲データをBSAVE形式で保存"で .NDP ファイルを生成した後、必ず"名前を付けて効果音データをBSAVE形式で保存"で.NDDファイルも生成してください。
+- この .NDPファイルと.NDDファイルの名称は同じにしてください。MGSPICOシリーズはロングファイル名や漢字文字に対応していませんので、英数アルファベット最大8文字で名付けてください。例) GAME001.NDP、GAME001.NDD
+- .NDPファイルと.NDDファイルをSDカードにコピーしてください。.NDDファイルが欠けるとMGSPICO3zは正しく動作しません。
+##### MUDRV.COMを使用した曲データの再生を行うには
+- [詳細はこちら](appendix/mudrv_musics/README_MUDRV.md)
 
 # LICENSEと利用に関する注意事項
 1. MGSPICO3z のファームウェアとそのソースコード、回路図データおよび資料ファイルは MIT License で配布されます。ただし、MGSPICO3z は、FatFsと8x16文字フォントを使用しています。FatFs/8x16文字フォントのソースコードの扱いに関しては各々のLICENSEに従ってください。
@@ -78,7 +80,7 @@ MGSPICO3zではTangNano9K内に、Z80 CPU(TV80)を実装しMGSDRVとKINROU5に�
 - ym2149_audio Copyright (c) 2020, Matthew Hagerty. https://github.com/dnotq/ym2149_audio
 - TV80 Copyright (c) 2004 Guy Hutchison. https://github.com/hutch31/tv80
 
-### 起動時に読み込んで使用しているソフトウェア
+### 起動時にSDカードから読み込んで使用しているソフトウェア
 - MGSDRV (C) Ain./Gigamix https://gigamix.jp/mgsdrv/
 - 勤労５号（MuSICA互換ドライバ） (C) 1996,1997 Keiichi Kuroda / BTO(MuSICA Laboratory) All rights reserved. https://sakuramail.net/fswold/music.html#muskin
 - NDP (PSG Driver for MSX) Programmed by naruto2413 https://ndp.squares.net/web/
@@ -86,6 +88,7 @@ MGSPICO3zではTangNano9K内に、Z80 CPU(TV80)を実装しMGSDRVとKINROU5に�
 ## 修正履歴
 |date|firmware|note|
 |:--|:--|:--|
+|2025/11/30|mgspico3z_firmware_v3.4.2|●機能追加:<br>・MUDRV.COMを使用したBGMデータ再生に対応したました。<br>・再生中に[●]ボタンを押すと長く押して離すと再生を停止するようにした。再生中に別の曲を選択して[●]ボタンを押すとその曲の再生が始まりますが、長押しの場合は再生はせず再生中の曲が停止します（使ってみると地味に役立ちます）|
 |2025/11/29|mgspico3z_firmware_v3.4.1|●機能追加:<br>・NDPv1.04の16KBを超えるBGMデータ再生に対応したました(最大24KB)。
 |2025/09/01|mgspico3z_firmware_v3.4.0|●機能追加:<br>・VGM形式、TGF形式の楽曲データの再生に対応した。<br>(既知の問題点としてVGM/TGFのデータを再生開始時や再思中にプチノイズが混ざることあり)<br>・SDカード内のディレクトリ階層にも対応しました<br>●改善:<br>・SETTING画面の操作性を改善しました|
 |2025/08/16|mgspico3z_firmware_v3.3.1|●不具合修正:<br>loop cnt を 1 に設定してあるとき２番目に再生された曲がすぐにフェードアウトしてしまう不具合を修正した|

@@ -40,7 +40,7 @@ const MgspicoSettings::ITEM *MgspicoSettings::GetItem(const int indexItem) const
 {
 	static const ITEM items[] = 
 	{
-		{"music",		5,	{" MGS ", "MuSICA", " NDP ", " VGM ", " TGF ",}	},
+		{"music",		6,	{" MGS ", "MuSICA", " NDP ", " VGM ", " TGF ", "MUDRV"}	},
 		{"loop cnt",	4,	{" * ", " 1 ", " 2 ", " 3 ", }				},
 		{"auto run",	2,	{"OFF", "ON", }							},
 		{"random",		2,	{"OFF", "ON", }							},

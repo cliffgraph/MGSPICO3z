@@ -70,7 +70,7 @@ void CHarz80Ctrl::WritePsram(const uint32_t addr, const uint8_t dt8)
 	return;
 }
 
-uint8_t CHarz80Ctrl::RaedPsram(const uint32_t addr)
+uint8_t CHarz80Ctrl::ReadPsram(const uint32_t addr)
 {
 	static const int LEN=4+1;
 	uint8_t srx[LEN];

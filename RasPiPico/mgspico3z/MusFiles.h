@@ -21,6 +21,7 @@ private:
 	int m_NumItems;
 	int m_NumFiles;
 	FILESPEC m_Files[MAX_FILEITEMS];
+	char m_SpecialFileName[LEN_FILE_NAME+1];
 
 public:
 	MusFiles();
@@ -33,14 +34,17 @@ public:
 	static void DeleteTermPath(char *pPath);
 	static bool IsExistDir(const char *pDir);
 	static bool IsExistFile(const char *pFile);
+	static bool FindFirstByWild(const char *pDir, const char *pWild, char *pFoundFileName);
 
 public:
 	void ClearList();
-	void ReadFileNames(const char *pWild, const char *pCurDir);
+	void ListupFileNames(const char *pWild, const char *pCurDir);
+	void SearchSpecialFile(const char *pWild, const char *pCurDir);
 	int GetNumItems() const;
 	int GetNumFiles() const;
 	bool IsEmpty() const;
 	int GetTopFileNo() const;
 	const FILESPEC *GetItemSpec(const int no) const;
-	const char* GetDirName(const int no) const;
+	const char *GetDirName(const int no) const;
+	const char *GetSpecialFileName() const;
 };

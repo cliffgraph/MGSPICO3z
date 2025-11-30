@@ -10,7 +10,7 @@ public:
 	{
 		const char *pName;
 		const int num;
-		const char *pChoices[5];
+		const char *pChoices[6];
 	};
 	const static int NUM_MENUITEMS;
 

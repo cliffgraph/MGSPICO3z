@@ -10,6 +10,7 @@ MUSTYPE:						;; ここの定義を変更したら、SNDCTRL: ルーチン内の
 	.NDP			equ	0x02
 	.VGM			equ	0x03
 	.TGF			equ	0x04
+	.MUDRV			equ	0x05
 
 HARZIO:
 	.LED6			equ	0x00	;; bit0-5 = TangNano9K On board LED, biton -> turn-on
@@ -89,6 +90,12 @@ NDP:
 	.TRACK_C		equ .NDPINI + 28*3 + 61*3 + 31
 	.TRACK_RTH		equ .NDPINI + 28*3 + 61*0 + 4
 
+; MUDRV's sub-routines
+MUDRV:
+	.MUSDATA		equ 0xB600	;; 楽曲データの位置アドレス（この定義は使用しない）
+	.FUNC			equ 0xC400	;; 機能サブルーチン(C=コマンドコード)
+	.MINTER			equ	0xC66D	;; 割込ルーチンの先頭アドレス（0xC403より深いところ）
+
 ;----------------------------------------------------------------------------
 org ORG_HARZENTRY
 SNDCTRL:
@@ -106,6 +113,8 @@ SNDCTRL:
 		jp		z, VGM_PLAYER		; VGM
 		dec		A
 		jp		z, TGF_PLAYER		; TGF
+		dec		A
+		jp		z, MUDRV_PLAYER		; MUDRV
 		jr		.@1
 
 ;----------------------------------------------------------------------------
@@ -126,7 +135,9 @@ HTIMI:
 org ORG_WORKIF
 WORKIF:
 	.driver_select
-		db		0			; 0=MGSDRV、1=KINROU5、2=NDP, 3=VGM, 4=TGF
+		db		0			; 0=MGSDRV、1=KINROU5、2=NDP, 3=VGM, 4=TGF, 5=MUDRV
+	.mudrv_music_top_addr
+		dw		0xB600		;
 
 ;----------------------------------------------------------------------------
 org ORG_CODE
@@ -970,6 +981,297 @@ TGF_PLAYER:
 		; Z80を止めておく
 		halt
 
+
+;----------------------------------------------------------------------------
+; MUDRV
+;----------------------------------------------------------------------------
+MUDRV_PLAYER:
+	.begin
+		call	LED2N
+		call	CCMDCNT_RESET
+		call	MUDRV_INITSYS
+		;ei		; 割り込みは使用しません。
+	.mainloop
+		ld		A, (MUDRV_SYSINFO.playsts)
+		call	LIFELED
+		call	MUDRV_ACTCMD
+		call	MUDRV_ROUTINE
+		call	MUDRV_FADEOUT
+		call	MUDRV_UPDATE_PLAYTIME
+		call	MUDRV_MAKEINFO
+		call	WAITVSYNC
+		jr		.mainloop
+
+MUDRV_PATCH1:
+		ld		A, H
+		or		L
+		jp		Z, 0xCD2D		; ポインタが 0 なら、0xCD2Dへ
+		ld		A,(HL)			; 楽曲データを参照
+		or		A				; 0 なら、0xCD2D へ
+		jp		Z, 0xCD2D
+		JP		0xC821
+
+MUDRV_INITSYS:
+	.bein
+		ld		A, 0x00						; 初期化コード
+		call	MUDRV.FUNC
+		xor		A
+		ld		(MUDRV_SYSINFO.playsts), A
+		ld		(MUDRV_SYSINFO.updatecnt), A
+		; -----------------
+		; ↓<不採用＞
+		; MUDRVの動作を正しく動作させるために、0000hに00hを書き込む
+		; トラックデータの終端でポインタが0になるが、0の時に演奏しないという処理になっていない
+		; ポインタの参照先が0なら処理しない作りになっていたので、0000hに0を書いておいて、
+		; ポインタが0位なっても正しく動作するようにしている。
+		; ld		(0x0000), A
+		; -----------------
+		; ↓＜採用＞
+		; 0x0000に0 を書くのではなく、素直にポインタが0かどうかのチェックを追加するようにした。
+		; そのチェックルーチンへのJPをパッチ当てしているのが下記のコード。チェックルーチンは、MUDRV_PATCH1
+		; opecode of "jp  MUDRV_PATCH1" to 0xCB1C-0xCB1E
+		ld		A, 0xC3
+		ld		IX, 0xC81C
+		ld		HL, MUDRV_PATCH1
+		ld		(IX+0), A
+		ld		(IX+1), L
+		ld		(IX+2), H
+		; -----------------
+		ld		HL, (WORKIF.mudrv_music_top_addr)
+		ld		(0xC458), HL	; C458hには、楽曲データの先頭アドレス（デフォルト0xB600）が書かれている。これを書き換える。
+		ret
+
+MUDRV_ACTCMD:
+	.begin
+		in		A, (HARZIO.CCMD_RD_CODE)
+		or		A
+	;case CCMD.NONE
+		ret		z
+	;case CCMD.PLAY
+	.play	
+		dec		A
+		jr		nz, .stop
+		ld		A, 0x02						; 再生！
+		call	MUDRV.FUNC
+		call	PLAYTIME_RESET				; 再生タイム値をリセット
+		ld		A, (MUDRV_WORK.ui_volume)	; 電子VOLにユーザー操作による音量値を設定
+		call	MUDRV_SET_VOLUME
+		ld		A, 0x01
+		ld		(MUDRV_SYSINFO.playsts), A
+		call	CCMDCNT_INC
+		ret
+	;case CCMD.STOP
+	.stop
+		dec		A
+		jr		nz, .fadeout
+		ld		A, 0x01						; 停止！
+		call	MUDRV.FUNC
+		call	PLAYTIME_RESET	; 再生タイム値をリセット
+		xor		A
+		ld		(MUDRV_SYSINFO.playsts), A
+		call	CCMDCNT_INC
+		ret
+	;case CCMD.FADEOUT
+	.fadeout
+		dec		A
+		jr		nz, .volume
+		ld		A, (MUDRV_SYSINFO.playsts)
+		cp		0x01
+		jr		nz, .@1
+		;di
+		ld		A, 0x02						; Start fadeout.
+		ld		(MUDRV_SYSINFO.playsts), A
+		xor		A
+		ld		(MUDRV_WORK.fo_step), A
+	.@1
+		call	CCMDCNT_INC
+		;ei
+		ret
+	; case CCMD.VOLUME
+	.volume
+		dec		A
+		ret		nz
+		in		A, (HARZIO.CCMD_RD_DATA)
+		ld		(MUDRV_WORK.ui_volume), A
+		call	MUDRV_SET_VOLUME
+		call	CCMDCNT_INC
+		ret
+
+MUDRV_ROUTINE:
+	.begin
+		call	MUDRV.MINTER
+		ret
+
+MUDRV_UPDATE_PLAYTIME:
+	.begin
+		ld		A, (MUDRV_SYSINFO.playsts)
+		or		A
+		ret		z
+		call	PLAYTIME_INC
+		ret
+
+MUDRV_FADEOUT:
+	.begin
+		ld		A, (MUDRV_SYSINFO.playsts)
+		cp		0x02
+		ret		nz
+		ld		A, (MUDRV_WORK.fo_step)
+		inc		A
+		ld		(MUDRV_WORK.fo_step), A
+		cp		17				; 1/60 * 17 = 0.27sec, 0.27*15 = 4secフェード
+		ret		nz
+		xor		A
+		ld		(MUDRV_WORK.fo_step), A
+		ld		A, (MUDRV_WORK.fo_volume)
+		inc		A
+		call	MUDRV_SET_VOLUME
+		;
+		ld		A, (MUDRV_WORK.fo_volume)
+		cp		20				; 本来15で良いが曲の合間に無音状態を入れるために4多い20にしている
+		jr		nz, .finish
+		ld		A, 0x01			; 停止！
+		call	MUDRV.FUNC
+		;call	PLAYTIME_RESET	; リセットしないこととした
+		xor		A
+		ld		(MUDRV_SYSINFO.playsts), A
+	.finish
+		ret
+
+MUDRV_SET_VOLUME:
+	.begin
+		ld		(MUDRV_WORK.fo_volume), A
+		call	CHIP_SET_EVOL
+		ret
+
+MUDRV_SYSINFO:
+	.updatecnt	DB	0x00
+	.playsts	DB	0x00		; 0x00=stop, 0x01=play, 0x02=fadeout
+MUDRV_WORK:
+	.ui_volume	DB	0x00		; ユーザー意思の音量値
+	.fo_volume	DB	0x00		; フェード中の音量値
+	.fo_step	DB	0x00
+
+MUDRV_MAKEINFO:
+	.begin
+		;di
+		ld		C, HARZIO.WKRAM_WR
+		;
+		; update_counter
+		ld		A, (MUDRV_SYSINFO.updatecnt)
+		out		(C), A
+		inc		A
+		ld		(MUDRV_SYSINFO.updatecnt), A
+		; ccmd_cnt
+		ld		A, (CCMDCNT)
+		out		(C), A
+		; loop_time
+		in		A, (HARZIO.CNT100US)
+		out		(C), A
+		; play tyme
+		ld		IX, PLAYTIME.playtyme
+		ld		A, (IX+0)	
+		out		(C), A
+		ld		A, (IX+1)	
+		out		(C), A
+		ld		A, (IX+2)	
+		out		(C), A
+		ld		A, (IX+3)	
+		out		(C), A
+
+		; type
+		ld		A, MUSTYPE.MUDRV				; ドライバタイプ
+		out		(C), A
+		;
+		xor		A								
+		out		(C), A							; FM_SLT
+		out		(C), A							; SCC_SLT
+		ld		A, 17							; MAXCHN  17固定?
+		out		(C), A
+		; TODO: 現状、演奏終了判定はしていない、今後。
+		ld		A, 0x01
+		out		(C), A							; LOOPCT
+		out		(C), A							; PLAYFG 0=演奏終了、!0=演奏中
+
+		xor		A
+		ld		B, A
+
+		ld		A, (0xD13A)						; PSG1
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD17A)						; PSG2
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD1BA)						; PSG3
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		; SCCx5
+		ld		B, 17-12
+		xor		A
+	.@1
+		out		(C), A
+		out		(C), A
+		djnz	.@1
+
+		ld		A, (0xD1FA)						; FM1
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD23A)						; FM2
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD27A)						; FM4
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD2BA)						; FM5
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD2FA)						; FM6
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD33A)						; FM6
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD37A)						; FM6
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD3BA)						; FM7
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD3FA)						; FM8
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		ld		A, (0xD43A)						; FM9
+		out		(C), A
+		ld		A, B
+		out		(C), A
+
+		;
+		out		(HARZIO.WKRAM_ED), A			; finish(don't care the value of A).
+		;ei
+		ret
 
 
 
